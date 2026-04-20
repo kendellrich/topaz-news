@@ -1,5 +1,4 @@
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { Redis } from '@upstash/redis';
 
 interface Story {
   category: string;
@@ -8,58 +7,60 @@ interface Story {
   url: string;
 }
 
-function getStories(): { stories: Story[]; updatedAt: string } {
-  const dataPath = join(process.cwd(), 'public', 'stories.json');
-  if (existsSync(dataPath)) {
-    const raw = readFileSync(dataPath, 'utf-8');
-    return JSON.parse(raw);
+const fallbackStories: Story[] = [
+  {
+    category: 'ANTHROPIC',
+    headline: 'Claude Opus 4.7 just released',
+    summary: 'Anthropic dropped Opus 4.7 on April 16, 2026. The latest and most capable model in the Claude 4 family with improvements across reasoning and coding.',
+    url: 'https://www.anthropic.com/news',
+  },
+  {
+    category: 'ANTHROPIC',
+    headline: 'Claude Mythos accidentally leaked',
+    summary: 'A new model more powerful than Opus was revealed via an Anthropic data exposure. Early testers say it is a step change in capability.',
+    url: 'https://fortune.com/2026/03/26/anthropic-says-testing-mythos-powerful-new-ai-model-after-data-leak-reveals-its-existence-step-change-in-capabilities/',
+  },
+  {
+    category: 'POLICY',
+    headline: 'Federal judge blocks Pentagon retaliation against Anthropic',
+    summary: 'After refusing to enable mass surveillance and autonomous weapons, the DoD punished Anthropic. A judge called it First Amendment retaliation.',
+    url: 'https://www.npr.org/2026/03/26/nx-s1-5762971/judge-temporarily-blocks-anthropic-ban',
+  },
+  {
+    category: 'PRODUCT',
+    headline: 'Claude can now use your Mac',
+    summary: 'Pro and Max users can now let Claude open apps, click buttons, and navigate their screen autonomously.',
+    url: 'https://www.anthropic.com/news',
+  },
+  {
+    category: 'INDUSTRY',
+    headline: 'MCP is now the universal AI standard',
+    summary: 'Anthropic donated MCP to the Linux Foundation. OpenAI, Microsoft, and Google have all adopted it as the default way AI connects to tools.',
+    url: 'https://techcrunch.com/2026/01/02/in-2026-ai-will-move-from-hype-to-pragmatism/',
+  },
+  {
+    category: 'INDUSTRY',
+    headline: 'Atlassian cuts 1,600 jobs for AI pivot',
+    summary: 'The Australian software giant replaced its CTO with two AI-focused CTOs and redirected resources toward AI development.',
+    url: 'https://aibusiness.com/generative-ai/10-ai-predictions-2026',
+  },
+];
+
+async function getStories(): Promise<{ stories: Story[]; updatedAt: string }> {
+  try {
+    const redis = Redis.fromEnv();
+    const data = await redis.get('ai-stories') as string | null;
+    if (data) {
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    }
+  } catch (e) {
+    console.error('Redis error:', e);
   }
-  // Fallback stories if no data file exists yet
-  return {
-    updatedAt: new Date().toISOString(),
-    stories: [
-      {
-        category: 'ANTHROPIC',
-        headline: 'Claude Opus 4.7 just released',
-        summary: 'Anthropic dropped Opus 4.7 on April 16, 2026. The latest and most capable model in the Claude 4 family with improvements across reasoning and coding.',
-        url: 'https://www.anthropic.com/news',
-      },
-      {
-        category: 'ANTHROPIC',
-        headline: 'Claude Mythos accidentally leaked',
-        summary: 'A new model more powerful than Opus was revealed via an Anthropic data exposure. Early testers say it is a step change in capability.',
-        url: 'https://fortune.com/2026/03/26/anthropic-says-testing-mythos-powerful-new-ai-model-after-data-leak-reveals-its-existence-step-change-in-capabilities/',
-      },
-      {
-        category: 'POLICY',
-        headline: 'Federal judge blocks Pentagon retaliation against Anthropic',
-        summary: 'After refusing to enable mass surveillance and autonomous weapons, the DoD punished Anthropic. A judge called it First Amendment retaliation.',
-        url: 'https://siliconangle.com/2026/03/27/anthropic-launch-new-claude-mythos-model-advanced-reasoning-features/',
-      },
-      {
-        category: 'PRODUCT',
-        headline: 'Claude can now use your Mac',
-        summary: 'Pro and Max users can now let Claude open apps, click buttons, and navigate their screen autonomously.',
-        url: 'https://www.anthropic.com/news',
-      },
-      {
-        category: 'INDUSTRY',
-        headline: 'MCP is now the universal AI standard',
-        summary: 'Anthropic donated MCP to the Linux Foundation. OpenAI, Microsoft, and Google have all adopted it as the default way AI connects to tools.',
-        url: 'https://techcrunch.com/2026/01/02/in-2026-ai-will-move-from-hype-to-pragmatism/',
-      },
-      {
-        category: 'INDUSTRY',
-        headline: 'Atlassian cuts 1,600 jobs for AI pivot',
-        summary: 'The Australian software giant replaced its CTO with two AI-focused CTOs and redirected resources toward AI development.',
-        url: 'https://aibusiness.com/generative-ai/10-ai-predictions-2026',
-      },
-    ],
-  };
+  return { stories: fallbackStories, updatedAt: new Date().toISOString() };
 }
 
-export default function Home() {
-  const { stories, updatedAt } = getStories();
+export default async function Home() {
+  const { stories, updatedAt } = await getStories();
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -80,7 +81,6 @@ export default function Home() {
 
   return (
     <main style={{ backgroundColor: cream, minHeight: '100vh', fontFamily: 'Georgia, serif' }}>
-
       <div style={{ backgroundColor: dark, padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: gold, fontWeight: 700, fontSize: '15px' }}>Topaz Technologies</span>
@@ -147,7 +147,6 @@ export default function Home() {
           {' · topaztech.co'}
         </p>
       </div>
-
     </main>
   );
 }

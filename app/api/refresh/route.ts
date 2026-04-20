@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 
 export async function GET() {
   try {
+    const redis = Redis.fromEnv();
+
     const RSS_FEEDS = [
       'https://www.anthropic.com/rss.xml',
       'https://techcrunch.com/category/artificial-intelligence/feed/',
+      'https://feeds.arstechnica.com/arstechnica/technology-lab',
+      'https://www.technologyreview.com/feed/',
+      'https://openai.com/blog/rss.xml',
     ];
 
     const Parser = (await import('rss-parser')).default;
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const fs = await import('fs');
-    const path = await import('path');
-
     const parser = new Parser();
-    const client = new Anthropic();
 
     const allItems: { title: string; link: string; contentSnippet: string; pubDate: string }[] = [];
 
@@ -36,6 +37,9 @@ export async function GET() {
       return NextResponse.json({ error: 'No feed items found' }, { status: 500 });
     }
 
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic();
+
     const prompt = `You are an AI news editor for a professional briefing page called AI Briefing by Topaz Technologies.
 
 Here are the latest headlines from top AI news sources:
@@ -46,11 +50,17 @@ ${allItems.map((item, i) => `${i + 1}. TITLE: ${item.title}
    DATE: ${item.pubDate}
 `).join('\n')}
 
-Pick the 6 most important stories. For each write a 1-2 sentence plain English summary.
+Pick the 6 most important stories. Focus on:
+- New model releases or major product launches
+- Big industry moves, funding, or layoffs
+- Policy, legal, or government AI news
+- Genuinely useful new features for AI users
+
+For each story write a 1-2 sentence plain English summary. No hype, no fluff.
 Assign one of these categories: ANTHROPIC, OPENAI, PRODUCT, INDUSTRY, POLICY, RESEARCH
 
 Return ONLY a JSON array, no other text:
-[{"category":"CATEGORY","headline":"Short headline","summary":"Summary sentence.","url":"url"}]`;
+[{"category":"CATEGORY","headline":"Short headline under 10 words","summary":"One to two sentence summary.","url":"original article URL"}]`;
 
     const message = await client.messages.create({
       model: 'claude-opus-4-6',
@@ -62,8 +72,8 @@ Return ONLY a JSON array, no other text:
     const clean = responseText.replace(/```json|```/g, '').trim();
     const stories = JSON.parse(clean);
 
-    const dataPath = path.join(process.cwd(), 'public', 'stories.json');
-    fs.writeFileSync(dataPath, JSON.stringify({ stories, updatedAt: new Date().toISOString() }));
+    const data = { stories, updatedAt: new Date().toISOString() };
+    await redis.set('ai-stories', JSON.stringify(data));
 
     return NextResponse.json({ success: true, stories });
   } catch (error) {
